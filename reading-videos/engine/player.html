@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>player</title>
+<link rel="stylesheet" href="/engine/stage.css">
+</head>
+<body>
+<div id="frame"></div>
+<script type="module">
+import { createStage } from '/engine/stage.js';
+
+const params = new URLSearchParams(location.search);
+const vid = params.get('v');
+const mod = await import(`/videos/${vid}/video.js`);
+
+// Real timings come from the TTS step; ?draft=1 estimates them from word counts
+// so layouts can be previewed before any audio exists.
+let timings;
+if (params.get('draft')) {
+  let t = 900;
+  const beats = mod.beats.map((b) => {
+    const words = (b.say || b.text).split(/\s+/).length;
+    const start = t, end = t + words * 390;
+    t = end + (b.gap ?? 300);
+    return { ...b, start, end };
+  });
+  timings = { beats, total: t + 1500 };
+} else {
+  timings = await (await fetch(`/build/${vid}/timings.json`)).json();
+}
+
+const S = createStage(document.getElementById('frame'), timings, mod.meta);
+mod.build(S);
+S.chrome();
+S.finalize();
+await document.fonts.ready;
+S.seek(0);
+window.duration = S.duration;
+window.seek = (t) => S.seek(t);
+window.beatsAt = timings.beats;
+window.ready = true;
+
+if (params.get('play')) {
+  const t0 = performance.now() - Number(params.get('t') || 0);
+  const tick = () => { S.seek(performance.now() - t0); requestAnimationFrame(tick); };
+  tick();
+}
+</script>
+</body>
+</html>
